@@ -7,21 +7,22 @@ import random
 import time
 
 # Hyperparameters
-lr_actor = 0.001
-lr_critic = 0.001
+lr_actor = 0.00001
+lr_critic = 0.0001
 clip_ratio = 0.2
 epochs = 10
-batch_size = 64
-gamma = 0.99
+batch_size = 32
+gamma = 1.0
 
 # Job Scheduling Environment
 class ReentrantNetworkEnv(gymnasium.Env):
-    def __init__(self, distance_matrix, buffer_capacity=5, num_buffers=7, failure_prob=0.1, max_time_steps=100):
+    def __init__(self, distance_matrix, buffer_capacity_1 = 100, buffer_capacity=10, num_buffers=5, failure_prob=0.00, max_time_steps=1000):
         ''' Initialize the Reentrant Network Environment '''
         super(ReentrantNetworkEnv, self).__init__()
 
         self.distance_matrix = distance_matrix
         self.num_buffers = num_buffers + 1 # last buffer represents the machine of last buffer to track ready time
+        self.buffer_capacity_1 = buffer_capacity_1
         self.buffer_capacity = buffer_capacity
         self.failure_prob = failure_prob
         self.max_time_steps = max_time_steps
@@ -33,6 +34,7 @@ class ReentrantNetworkEnv(gymnasium.Env):
         self.action_space = spaces.Discrete(self.action_size)
 
         self.trigger_buffer = []
+        self.packages_left = 0
         self.reset()
 
     def reset(self):
@@ -43,6 +45,7 @@ class ReentrantNetworkEnv(gymnasium.Env):
         self.time_step = 0
         self.done = False
         self.trigger_buffer.clear()
+        self.packages_left = 0
         return self.get_state()
 
     def step(self, action):
@@ -50,34 +53,26 @@ class ReentrantNetworkEnv(gymnasium.Env):
         self.time_step += 1
         reward = 0
 
-        # at each time step, check if package at last machine is ready
+        # at each time step, check if package at last machine is ready to leave the system
         if 0 < len(self.buffer[-1]) and self.buffer[-1][0][1] <= self.time_step:
-            self.buffer[-1].pop(0)
-            reward += 10 # reward for completing a package
+            self.buffer[-1].pop(0) # remove package from last machine
+            self.packages_left += 1
             print("Package leaves system")
 
         if 0 < action < self.num_buffers - 1: # if any action but last buffer is chosen
-            if 0 < len(self.buffer[action - 1]) and len(self.buffer[action]) < self.buffer_capacity: # if current buffer is not empty and new buffer not full
-                if self.buffer[action - 1][0][1] <= self.time_step: # if package is ready (i.e. machine is not busy)
+            if 0 < len(self.buffer[action - 1]) and len(self.buffer[action]) < self.buffer_capacity and all(ready_time <= self.time_step for _, ready_time in self.buffer[action - 1]): # if current buffer is not empty and new buffer not full and machine not busy
+                if self.buffer[action - 1][0][1] <= self.time_step: # if package is ready
                     self.buffer[action - 1].pop(0) # remove package from current buffer (FIFO)
                     service_time = self._service_time(buffer_index = action - 1) # call service time function
                     ready_time = self.time_step + service_time # calculate ready time of package
                     self.buffer[action].append((self.time_step, ready_time))
-            elif 0 < len(self.buffer[action - 1]) and len(self.buffer[action]) == self.buffer_capacity: # if current buffer is not empty but new buffer is full
-                reward -= 0 # penalize for choosing a full new buffer
-            elif 0 == len(self.buffer[action - 1]): # if current buffer is empty
-                reward -= 0 # penalize for choosing an empty current buffer
+
         elif action == self.num_buffers - 1:  # if action is at last buffer
             if 0 < len(self.buffer[action - 1]) and len(self.buffer[action]) < 1: # allow only one package in last machine
                 self.buffer[action - 1].pop(0)  # remove package from last buffer (FIFO)
                 service_time = self._service_time(buffer_index=action - 1)  # call service time function
                 ready_time = self.time_step + service_time  # calculate ready time of package
                 self.buffer[action].append((self.time_step, ready_time))
-            elif 0 < len(self.buffer[action - 1]) and len(self.buffer[
-                                                              action]) == self.buffer_capacity:  # if last buffer is not empty but corresponding machine is full
-                reward -= 0 # penalize for choosing an empty last buffer
-            elif 0 == len(self.buffer[action - 1]): # if last buffer is empty
-                reward -= 0
 
         # if action is 0, do nothing
 
@@ -97,9 +92,9 @@ class ReentrantNetworkEnv(gymnasium.Env):
 
     def _package_arrivals(self):
         ''' Simulate actual and virtual package arrivals to the system '''
-        new_packages = np.random.poisson(0.6) # arrival rate of packages
+        new_packages = np.random.poisson(0.1) # arrival rate of packages
         for _ in range(new_packages):
-            if len(self.buffer[0]) < self.buffer_capacity: # if first buffer is not full
+            if len(self.buffer[0]) < self.buffer_capacity_1: # if first buffer is not full
                 self.buffer[0].append((self.time_step, self.time_step)) # add package to first buffer (ready immediately)
 
         virtual_arrival = np.random.poisson(0.3) # simulate virtual arrivals to wait buffer
@@ -113,10 +108,10 @@ class ReentrantNetworkEnv(gymnasium.Env):
 
     def _service_time(self, buffer_index):
         ''' Calculate service time for a package at a buffer'''
-        service_time = float(0.1 + self.robot_distances[buffer_index]) # service time plus transportation time
+        service_time = float(0.001 + self.robot_distances[buffer_index]) # service time plus transportation time
         if np.random.rand() < self.failure_prob: # simulate failure with probability failure_prob
             self.failures[buffer_index] = 1 # track failures
-            service_time = float(service_time + 0.5) # add penalty for failure
+            service_time = float(service_time + 0.1) # add penalty for failure
             if self.buffer[buffer_index] and self.buffer[buffer_index][0][1] <= self.time_step: # if package is ready
                 self.buffer[buffer_index].pop(0) # remove package from buffer
         else:
@@ -132,9 +127,9 @@ class ReentrantNetworkEnv(gymnasium.Env):
 class ActorCritic(tf.keras.Model):
     def __init__(self, state_size, action_size):
         super(ActorCritic, self).__init__()
-        self.dense1 = tf.keras.layers.Dense(64, activation='relu')
+        self.dense1 = tf.keras.layers.Dense(32, activation='relu')
         self.policy_logits = tf.keras.layers.Dense(action_size)
-        self.dense2 = tf.keras.layers.Dense(64, activation='relu')
+        self.dense2 = tf.keras.layers.Dense(32, activation='relu')
         self.value = tf.keras.layers.Dense(1)
 
     def call(self, state):
@@ -143,6 +138,7 @@ class ActorCritic(tf.keras.Model):
         value = self.value(x)
         return logits, value
 
+#PPO Algorithm
 def ppo_loss(model, optimizer, old_logits, old_values, advantages, states, actions, returns):
     action_size = model.policy_logits.units
 
@@ -161,7 +157,7 @@ def ppo_loss(model, optimizer, old_logits, old_values, advantages, states, actio
 
         entropy_bonus = tf.reduce_mean(-policy * tf.math.log(policy + 1e-10))
 
-        total_loss = policy_loss + 0.5 * value_loss + 0.01 * entropy_bonus
+        total_loss = policy_loss + 0.5 * value_loss + 0.01 * entropy_bonus # 0.5 and 0.01 are hyperparameters
         return total_loss
 
     def get_advantages(returns, values):
@@ -204,6 +200,7 @@ distance_matrix = np.array([
     [1/4, 1/5, 1/8, 1/9, 1/10,1/12, 1/17, 1/18, 0, 1/15],
     [1/2, 1/3, 1/4, 1/5, 1/6, 1/8, 1/13, 1/14, 1/15, 0],
 ], dtype=float)
+distance_matrix = distance_matrix / 100
 
 start_time = time.time()
 
@@ -211,18 +208,18 @@ env = ReentrantNetworkEnv(distance_matrix)
 state_size = env.observation_space.shape[0]
 action_size = env.action_space.n
 model = ActorCritic(state_size, action_size)
-optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
+optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
 
 max_episodes = 200
 max_steps_per_episode = 1000
-costs_per_episode = []
+average_rewards_per_episode = []
+packages_left_per_episode = []
 
 for episode in range(max_episodes):
     states, actions, rewards, values = [], [], [], []
+    discounted_reward = 0
     state = env.reset()
     done = False
-    total_reward = 0  # Initialize total reward for the episode
-    amount_rewards_collected = 0
 
     for step in range(max_steps_per_episode):
         state = tf.expand_dims(tf.convert_to_tensor(state), 0)
@@ -230,9 +227,6 @@ for episode in range(max_episodes):
         action = tf.random.categorical(logits, 1)[0, 0].numpy()
 
         next_state, reward, done, _ = env.step(action)
-
-        total_reward += reward
-        amount_rewards_collected += 1
 
         states.append(state)
         actions.append(action)
@@ -246,6 +240,8 @@ for episode in range(max_episodes):
 
     rewards = discount_rewards(rewards, gamma)
     returns_batch = tf.convert_to_tensor(rewards, dtype=tf.float32)
+
+    average_rewards_per_episode.append(-1 * (rewards[0]/len(rewards)))
 
     states = tf.concat(states, axis=0)
     actions = np.array(actions, dtype=np.int32)
@@ -265,16 +261,23 @@ for episode in range(max_episodes):
         returns=returns_batch
     )
 
-    average_cost = -(total_reward/amount_rewards_collected)
-    costs_per_episode.append(average_cost)
+    packages_left_per_episode.append(env.packages_left)
 
 end_time = time.time()
 training_duration = end_time - start_time
 
-plt.plot(costs_per_episode)
-plt.xlabel('Episodes')
-plt.ylabel('Average Holding Cost')
-plt.title('Average Holding Cost over Episodes')
+fig, axes = plt.subplots(1,2)#
+fig.suptitle('Training Progress')
+axes[0].plot(average_rewards_per_episode)
+axes[0].set_xlabel('Episodes')
+axes[0].set_ylabel('Average Amount of Packages')
+#axes[0].set_title('Average Amount of Packages over Episodes')
+axes[1].plot(packages_left_per_episode)
+axes[1].set_xlabel('Episodes')
+axes[1].set_ylabel('Number of Packages Left')
+#axes[1].set_title('Number of Packages Leaving the System per Episode')
 plt.show()
+
+
 
 print(f"Training completed in {training_duration:.2f} seconds")
