@@ -10,7 +10,7 @@ import time
 lr_actor = 0.00001
 lr_critic = 0.0001
 clip_ratio = 0.2
-epochs = 10
+epochs = 100
 batch_size = 32
 gamma = 1.0
 
