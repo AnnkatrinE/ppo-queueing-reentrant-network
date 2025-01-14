@@ -13,6 +13,7 @@ clip_ratio = 0.2
 epochs = 10
 batch_size = 32
 gamma = 1.0
+test = 0
 
 # Job Scheduling Environment
 class ReentrantNetworkEnv(gymnasium.Env):
