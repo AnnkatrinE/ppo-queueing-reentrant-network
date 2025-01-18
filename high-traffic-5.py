@@ -16,7 +16,7 @@ gamma = 1.0
 
 # Job Scheduling Environment
 class ReentrantNetworkEnv(gymnasium.Env):
-    def __init__(self, distance_matrix, buffer_capacity_1 = 150, buffer_capacity=10, num_buffers=5, failure_prob=0.01, max_time_steps=1000):
+    def __init__(self, distance_matrix, buffer_capacity_1 = 500, buffer_capacity=10, num_buffers=5, failure_prob=0.01, max_time_steps=1000):
         ''' Initialize the Reentrant Network Environment '''
         super(ReentrantNetworkEnv, self).__init__()
 
@@ -315,7 +315,7 @@ fig.tight_layout(pad=3.0)
 axes[0].plot(average_rewards_per_episode)
 axes[0].set_xlabel('Episodes')
 axes[0].set_ylabel('Average Amount of Packages')
-axes[0].axhline(y=150, color='purple', linestyle=':', linewidth=2, label=f'Buffer Capacity 1 (150)') # uncomment for restrictive buffer capacity
+#axes[0].axhline(y=150, color='purple', linestyle=':', linewidth=2, label=f'Buffer Capacity 1 (150)') # uncomment for restrictive buffer capacity
 axes[1].plot(packages_left_per_episode)
 axes[1].set_xlabel('Episodes')
 axes[1].set_ylabel('Total Number of Packages Left')
