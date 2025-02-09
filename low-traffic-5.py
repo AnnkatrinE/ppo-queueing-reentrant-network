@@ -189,7 +189,7 @@ def ppo_loss(model, optimizer_actor, optimizer_critic, old_logits, old_values, a
         # Entropy Bonus
         entropy_bonus = tf.reduce_mean(-policy * tf.math.log(policy + 1e-10))
 
-        total_loss = policy_loss + 0.5 * value_loss - 0.5 * entropy_bonus
+        total_loss = policy_loss + 0.5 * value_loss - 0.8 * entropy_bonus
         return total_loss, policy_loss, value_loss
 
     @tf.function

@@ -16,7 +16,7 @@ gamma = 1.0
 
 # Job Scheduling Environment
 class ReentrantNetworkEnv(gymnasium.Env):
-    def __init__(self, distance_matrix, buffer_capacity_1 = 1000000, buffer_capacity=10, num_buffers=5, failure_prob=0.01, max_time_steps=1000):
+    def __init__(self, distance_matrix, buffer_capacity_1 = 1000000, buffer_capacity=10, num_buffers=10, failure_prob=0.01, max_time_steps=1000):
         ''' Initialize the Reentrant Network Environment '''
         super(ReentrantNetworkEnv, self).__init__()
 
@@ -229,11 +229,16 @@ def normalize_returns(returns):
 # Main training loop
 
 distance_matrix = np.array([
-    [0, 1/10, 1/8, 1/6, 1/4],
-    [1/10, 0, 1/12, 1/9, 1/5],
-    [1/8, 1/12, 0, 1/8, 1/6],
-    [1/6, 1/9, 1/10, 0, 1/9],
-    [1/4, 1/5, 1/6, 1/9, 0]
+    [0, 1/19, 1/16, 1/15, 1/13, 1/10, 1/8, 1/7, 1/6, 1/4],
+    [1/19, 0, 1/17, 1/16, 1/14, 1/12, 1/9, 1/8, 1/7, 1/6],
+    [1/16, 1/17, 0, 1/18, 1/16, 1/13, 1/11, 1/10, 1/9, 1/7],
+    [1/15, 1/16, 1/18, 0, 1/18, 1/14, 1/12, 1/11, 1/10, 1/8],
+    [1/13, 1/14, 1/16, 1/18, 0, 1/16, 1/13, 1/12, 1/11, 1/9],
+    [1/10, 1/12, 1/13, 1/14, 1/16, 0, 1/15, 1/14, 1/13, 1/11],
+    [1/8, 1/9, 1/11, 1/12, 1/13, 1/15, 0, 1/18, 1/17, 1/15],
+    [1/7, 1/8, 1/10, 1/11, 1/12, 1/14, 1/18, 0, 1/19, 1/17],
+    [1/6, 1/7, 1/9, 1/10, 1/11, 1/13, 1/17, 1/19, 0, 1/18],
+    [1/4, 1/6, 1/7, 1/8, 1/9, 1/11, 1/15, 1/17, 1/18, 0]
 ], dtype=float)/10
 
 
@@ -246,7 +251,7 @@ model = ActorCritic(state_size, action_size)
 optimizer_actor = tf.keras.optimizers.Adam(learning_rate=lr_actor)
 optimizer_critic = tf.keras.optimizers.Adam(learning_rate=lr_critic)
 
-max_episodes = 200
+max_episodes = 500
 max_steps_per_episode = 1000
 average_rewards_per_episode = []
 packages_left_per_episode = []

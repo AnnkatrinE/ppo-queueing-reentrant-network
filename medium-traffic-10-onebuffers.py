@@ -198,7 +198,7 @@ def ppo_loss(model, optimizer_actor, optimizer_critic, old_logits, old_values, a
         # Entropy Bonus
         entropy_bonus = tf.reduce_mean(-policy * tf.math.log(policy + 1e-10))
 
-        total_loss = policy_loss + 0.5 * value_loss - 0.5 * entropy_bonus
+        total_loss = policy_loss + 0.5 * value_loss - 0.8 * entropy_bonus
         return total_loss, policy_loss, value_loss
 
     @tf.function
@@ -260,7 +260,7 @@ model = ActorCritic(state_size, action_size)
 optimizer_actor = tf.keras.optimizers.Adam(learning_rate=lr_actor)
 optimizer_critic = tf.keras.optimizers.Adam(learning_rate=lr_critic)
 
-max_episodes = 200
+max_episodes = 500
 max_steps_per_episode = 1000
 average_rewards_per_episode = []
 packages_left_per_episode = []
