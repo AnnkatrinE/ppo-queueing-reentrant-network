@@ -25,44 +25,26 @@ initial_entropy_coefficient = 0.8
 scaling_factor = 1.0
 
 # Parameters
-max_episodes = 400
-max_steps_per_episode = 2000
-buffer_capacity_1 = 500
-buffer_capacity = 1
+max_iterations = 400
+max_steps_per_iteration = 2000
+buffer_capacity_1 = 50
+buffer_capacity = 10
 num_buffers = 5
 arrival_rate = 0.1
 arrival_rate_virtual = 0.05
 
-'''distance_matrix = np.array([
+distance_matrix = np.array([
     [0, 1.25, 1.8, 2.5, 3.2],
     [1.25, 0, 0.8, 1.6, 2.5],
     [1.8, 0.8, 0, 1, 1.8],
     [2.5, 1.6, 1, 0, 1.1],
     [3.2, 2.5, 1.8, 1.1, 0]
-], dtype=float)'''
-
-# distance matrix work center five far away
-'''distance_matrix = np.array([
-    [0, 1.25, 1.8, 2.5, 10.2],
-    [1.25, 0, 0.8, 1.6, 9.5],
-    [1.8, 0.8, 0, 1, 8.8],
-    [2.5, 1.6, 1, 0, 8.1],
-    [10.2, 9.5, 8.8, 8.1, 0]
-], dtype=float)'''
-
-# distance matrix work center one far away
-distance_matrix = np.array([
-    [0, 8.25, 8.8, 9.5, 10.2],
-    [8.25, 0, 0.8, 1.6, 2.5],
-    [8.8, 0.8, 0, 1, 1.8],
-    [9.5, 1.6, 1, 0, 1.1],
-    [10.2, 2.5, 1.8, 1.1, 0]
 ], dtype=float)
 
 # Job Scheduling Environment
 class ReentrantNetworkEnv(gymnasium.Env):
     def __init__(self, distance_matrix, arrival_rate, arrival_rate_virtual, buffer_capacity_1 = 500, buffer_capacity=10,
-                 num_buffers=5,  failure_prob=0.05, max_steps_per_episode = 1000):
+                 num_buffers=5,  failure_prob=0.05, max_steps_per_iteration = 1000):
         ''' Initialize the Reentrant Network Environment '''
         super(ReentrantNetworkEnv, self).__init__()
 
@@ -74,7 +56,7 @@ class ReentrantNetworkEnv(gymnasium.Env):
         self.failures = np.zeros(num_buffers)
         self.arrival_rate = arrival_rate
         self.arrival_rate_virtual = arrival_rate_virtual
-        self.max_steps_per_episode = max_steps_per_episode
+        self.max_steps_per_iteration = max_steps_per_iteration
 
         self.state_size = 2 * num_buffers
         self.action_size = num_buffers + 1 # action for each buffer and one for wait action
@@ -176,7 +158,7 @@ class ReentrantNetworkEnv(gymnasium.Env):
         self._package_arrivals()
         self._trigger_decision_epoch()
 
-        if self.time_step >= self.max_steps_per_episode:
+        if self.time_step >= self.max_steps_per_iteration:
             self.done = True
 
         next_state = self.get_state()
@@ -309,66 +291,12 @@ def adaptive_entropy_coefficient(entropy, target_entropy, initial_coefficient,
     else:
         return initial_coefficient*scaling_factor
 
-# Evaluation function after Training
-def evaluate_model(model, env,
-                   max_episodes = 200, max_steps_per_episode = 10000):
-    random.seed(234895)
-    np.random.seed(234895)
-    tf.random.set_seed(234895)
-    print('Evaluation started')
-
-    average_rewards_per_episode_det = []
-    total_packages_left_det = []
-
-    global saved_logits
-
-    if saved_logits is None:
-        print("No saved logits available. Train the policy first.")
-        return
-
-    state = env.reset()
-    done = False
-    for episode in range(max_episodes):
-        states, actions, rewards, values = [], [], [], []
-        state = env.reset()
-        done = False
-
-        for step in range(max_steps_per_episode):
-            rewards = []
-            state_tensor = tf.convert_to_tensor(state, dtype=tf.float32)
-            state_tensor = tf.expand_dims(state_tensor, 0)
-
-            # Choose action based on saved logits
-            action = tf.random.categorical(saved_logits, 1)[0, 0].numpy()
-
-            next_state, reward, done, _ = env.step(action)
-            rewards.append(reward)
-
-            state = next_state
-
-            if done:
-                break
-
-        average_rewards_det = sum(rewards) / len(rewards)
-        average_rewards_per_episode_det.append(average_rewards_det)
-        total_packages_left_det.append(env.packages_left)
-
-    fig, axes = plt.subplots(1, 2)
-    fig.suptitle('Deterministic Policy')
-    fig.tight_layout(pad=3.0)
-    axes[0].plot(average_rewards_per_episode_det)
-    axes[0].set_xlabel('Policy Iterations')
-    axes[0].set_ylabel('Total Amount of Packages')
-    axes[1].plot(total_packages_left_det)
-    axes[1].set_xlabel('Policy Iterations')
-    axes[1].set_ylabel('Total Throughput')
-    plt.show()
 
 # Main training loop
 
 env = ReentrantNetworkEnv(distance_matrix = distance_matrix, arrival_rate = arrival_rate, arrival_rate_virtual = arrival_rate_virtual,
                           buffer_capacity_1 = buffer_capacity_1, buffer_capacity = buffer_capacity,
-                          num_buffers = num_buffers, max_steps_per_episode = max_steps_per_episode)
+                          num_buffers = num_buffers, max_steps_per_iteration = max_steps_per_iteration)
 state_size = env.observation_space.shape[0]
 action_size = env.action_space.n
 model = ActorCritic(state_size, action_size)
@@ -376,22 +304,22 @@ optimizer_actor = tf.keras.optimizers.Adam(learning_rate=lr_actor)
 optimizer_critic = tf.keras.optimizers.Adam(learning_rate=lr_critic)
 
 # Initializing
-average_rewards_per_episode = []
-packages_left_per_episode = []
-entropy_per_episode = []
-policy_loss_per_episode = []
-failures_per_episode = []
+average_rewards_per_iteration = []
+packages_left_per_iteration = []
+entropy_per_iteration = []
+policy_loss_per_iteration = []
+failures_per_iteration = []
 target_entropy = 0 #-np.log(1.0 / action_size) * 0.98
 saved_logits = None
 machine_loads = [[] for _ in range(num_buffers)]
 robot_load = []
 waiting = []
-first_episode_buffer_counts = []
-middle_episode_buffer_counts = []
-last_episode_buffer_counts = []
+first_iteration_buffer_counts = []
+middle_iteration_buffer_counts = []
+last_iteration_buffer_counts = []
 
 # Main training loop
-for episode in range(max_episodes):
+for iteration in range(max_iterations):
     states, actions, rewards, values = [], [], [], []
     returns_batch = []
     state = env.reset()
@@ -399,16 +327,16 @@ for episode in range(max_episodes):
 
     buffer_counts = []
 
-    for step in range(max_steps_per_episode):
+    for step in range(max_steps_per_iteration):
         state_tensor = tf.convert_to_tensor(state, dtype = tf.float32)
         state_tensor = tf.expand_dims(state_tensor, 0)
         logits, value = model(state_tensor)
         action = tf.random.categorical(logits, 1)[0, 0].numpy()
 
-        if episode == 0 and step == 0: # initial entropy value
+        if iteration == 0 and step == 0: # initial entropy value
             policy = tf.nn.softmax(logits)
             initial_entropy_value = tf.reduce_sum(-policy * tf.math.log(policy + 1e-10))
-            entropy_per_episode.append(initial_entropy_value)
+            entropy_per_iteration.append(initial_entropy_value)
 
         next_state, reward, done, _ = env.step(action)
 
@@ -424,13 +352,13 @@ for episode in range(max_episodes):
         if done:
             break
 
-    # Save buffer counts for first, middle and last episode
-    if episode == 0:
-        first_episode_buffer_counts = buffer_counts
-    elif episode == max_episodes // 2 - 1:
-        middle_episode_buffer_counts = buffer_counts
-    elif episode == max_episodes - 1:
-        last_episode_buffer_counts = buffer_counts
+    # Save buffer counts for first, middle and last iteration
+    if iteration == 0:
+        first_iteration_buffer_counts = buffer_counts
+    elif iteration == max_iterations // 2 - 1:
+        middle_iteration_buffer_counts = buffer_counts
+    elif iteration == max_iterations - 1:
+        last_iteration_buffer_counts = buffer_counts
 
     # Calculate returns batch
     discounted_sum = 0
@@ -464,34 +392,34 @@ for episode in range(max_episodes):
 
     # Calculate average rewards
     average_rewards = sum(rewards) / len(rewards)
-    average_rewards_per_episode.append(average_rewards)
+    average_rewards_per_iteration.append(average_rewards)
     # Calculate total throughput
-    packages_left_per_episode.append(env.packages_left)
+    packages_left_per_iteration.append(env.packages_left)
     # Calculate entropy
-    entropy_per_episode.append(entropy.numpy())
+    entropy_per_iteration.append(entropy.numpy())
     # Adapt entropy coefficient
     initial_entropy_coefficient = adaptive_entropy_coefficient(entropy.numpy(), target_entropy,
                                                                initial_entropy_coefficient, scaling_factor)
     # Track policy loss
-    policy_loss_per_episode.append(policy_loss.numpy())
+    policy_loss_per_iteration.append(policy_loss.numpy())
 
     # Track machine loads
     for i in range(num_buffers):
         if env.service_times_machines[i] > 0:
-            machine_load = env.service_times_machines[i]/max_steps_per_episode
+            machine_load = env.service_times_machines[i]/max_steps_per_iteration
             machine_loads[i].append(machine_load)
         else:
             machine_loads[i].append(0)
 
     # Track Gantry Robot load
     if env.transportation_times_robot > 0.0:
-        robot_load.append(env.transportation_times_robot/max_steps_per_episode)
+        robot_load.append(env.transportation_times_robot/max_steps_per_iteration)
 
     # Track waiting time
-    waiting.append(env.waiting/max_steps_per_episode)
+    waiting.append(env.waiting/max_steps_per_iteration)
 
     # Track failures
-    failures_per_episode.append(sum(env.failures))
+    failures_per_iteration.append(sum(env.failures))
 
 # Plotting
 # Plot average rewards and total throughput
@@ -506,11 +434,11 @@ else:
 fig, axes = plt.subplots(1,2)
 fig.suptitle(f'{regime}')
 fig.tight_layout(pad=3.0)
-axes[0].plot(average_rewards_per_episode)
+axes[0].plot(average_rewards_per_iteration)
 axes[0].set_xlabel('Policy Iterations')
 axes[0].set_ylabel('Average Amount of Packages')
-#axes[0].axhline(y=20, color='purple', linestyle=':', linewidth=2, label=f'Buffer Capacity 1 (20)') # uncomment for restrictive buffer capacity
-axes[1].plot(packages_left_per_episode)
+axes[0].axhline(y=50, color='purple', linestyle=':', linewidth=2, label=f'Buffer Capacity 1 (50)') # uncomment for restrictive buffer capacity
+axes[1].plot(packages_left_per_iteration)
 axes[1].set_xlabel('Policy Iterations')
 axes[1].set_ylabel('Total Throughput')
 plt.show()
@@ -518,10 +446,10 @@ plt.show()
 fig, axes = plt.subplots(1,2)
 fig.suptitle('Policy Loss and Entropy')
 fig.tight_layout(pad=3.0)
-axes[0].plot(policy_loss_per_episode)
+axes[0].plot(policy_loss_per_iteration)
 axes[0].set_xlabel('Policy Iterations')
 axes[0].set_ylabel('Policy Loss')
-axes[1].plot(entropy_per_episode)
+axes[1].plot(entropy_per_iteration)
 axes[1].set_xlabel('Policy Iterations')
 axes[1].set_ylabel('Entropy')
 plt.show()
@@ -538,27 +466,25 @@ plt.ylabel('Load')
 plt.legend()
 plt.show()
 
-# Plot the counts of packages in the first buffer for the first, 100th, and last episode
+# Plot the counts of packages in the first buffer for the first, 100th, and last iteration
 plt.figure(figsize=(10, 6))
-plt.plot(first_episode_buffer_counts, label='First Iteration')
-plt.plot(middle_episode_buffer_counts, label=f'{(max_episodes // 2)}th Iteration')
-plt.plot(last_episode_buffer_counts, label='Last Iteration')
+plt.plot(first_iteration_buffer_counts, label='First Iteration')
+plt.plot(middle_iteration_buffer_counts, label=f'{(max_iterations // 2)}th Iteration')
+plt.plot(last_iteration_buffer_counts, label='Last Iteration')
 plt.xlabel('Time Steps')
 plt.ylabel('Count of Packages in First Buffer')
 #plt.title('Count of Packages in First Buffer Over Time')
 plt.legend()
 plt.show()
 
-# Plot the failure counts per episode
+# Plot the failure counts per iteration
 plt.figure(figsize=(10, 6))
-plt.plot(failures_per_episode)
+plt.plot(failures_per_iteration)
 plt.xlabel('Policy Iterations')
 plt.ylabel('Number of Failures')
 plt.title('Failures Over Policy Iterations')
 plt.legend()
 plt.show()
 
-# Evaluate the model on deterministic policy
-#evaluate_model(model, env)
 
 

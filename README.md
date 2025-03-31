@@ -1,6 +1,6 @@
 # Reentrant Network Environment with PPO
 
-This repository contains the implementation of a Reentrant Network Environment using Proximal Policy Optimization (PPO) for job scheduling. The environment simulates a network of buffers and machines where packages are processed and moved from buffers to the respective machines by a Gantry Robot.
+This repository contains the implementation of a Reentrant Network Environment using Proximal Policy Optimization (PPO) for job scheduling. The environment models a network of buffers and machines, where packages are processed and transferred by a Gantry Robot through a series of work centers arranged in sequence.
 
 ## Files
 
